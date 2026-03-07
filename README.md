@@ -16,7 +16,6 @@ Before starting the script you can configure the server using a `server.properti
 
 It looks something like this:
 ```properties
-server-name=Test server
 max-players=4
 modt=My awesome server!
 ```
