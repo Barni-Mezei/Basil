@@ -1,4 +1,4 @@
-require "colors"
+--require "colors"
 
 local function pprint_iter(data, depth)
     local d = depth or 0

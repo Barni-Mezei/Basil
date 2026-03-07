@@ -1,4 +1,5 @@
 -- All minecraft colors and their ANSI representation
+-- Reference: https://minecraftitemids.com/color-codes
 chat_colors = {
     ["&0", "§0", "black",        "\u00A70"] = "black",
     ["&1", "§1", "dark_blue",    "\u00A71"] = "black",

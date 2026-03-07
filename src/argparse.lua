@@ -1,7 +1,4 @@
--- Global settings table
-if not settings then
-    settings = {}
-end
+local settings = {}
 
 local args = {}
 local aliases = {}
@@ -28,10 +25,25 @@ function add_argument(arg_name, arg_aliases, arg_type, arg_default, arg_descript
     }
 end
 
+-- Converts [str] into the given type. Valid types are: string|number|boolean
+local function convert(str, target_type)
+    if target_type == "string" then return str end
+    if target_type == "number" then return tonumber(str) end
+    if target_type == "boolean" then return str == "1" or str == "true" end
+
+    return str
+end
+
+
 local function generate_aliases()
     for arg_index,arg in pairs(args) do
         for _,alias in pairs(arg.alias) do
-            aliases[alias] = arg_index
+            aliases[alias] = {
+                index = arg_index,
+                action = arg.action,
+            }
+
+            settings[arg.path] = convert(arg.default, arg.type)
         end
     end
 end
@@ -51,20 +63,17 @@ function list_arguments()
     end
 end
 
--- Converts [str] into the given type. Valid types are: string|number|boolean
-local function convert(str, target_type)
-    if target_type == "string" then return str end
-    if target_type == "number" then return tonumber(str) end
-    if target_type == "boolean" then return str == "1" or str == "true" end
-
-    return str
+local function set_setting(path, arg_name, arg_value, arg_type)
+    settings[path] = convert(arg_value, arg_type)
+    print_color(("Set %s: %s"):format(
+        string.upper(arg_name),
+        tostring(arg_value)
+    ), colors.gray)
 end
 
 -- Parsesd the raw command line argumenmts and fill s up the settings table
 function parse(raw_args)
     generate_aliases()
-    pprint(aliases)
-    os.exit()
 
     local arg_index = nil
 
@@ -84,11 +93,7 @@ function parse(raw_args)
             local name = args[arg_index].name
 
             if action == "set" then
-                settings[path] = convert(raw_args[i], arg_type)
-                print_color(("Set %s: %s"):format(
-                    string.upper(name),
-                    tostring(raw_args[i])
-                ), colors.gray)
+                set_setting(path, name, raw_args[i], arg_type)
             end
 
             -- Call the specified function
@@ -101,8 +106,15 @@ function parse(raw_args)
 
         -- Get argument type
         if arg_index == nil and aliases[raw_args[i]] ~= nil then
-            arg_index = aliases[raw_args[i]]
+            local alias_data = aliases[raw_args[i]]
+            if alias_data.action == "flag" then
+                local arg_data = args[alias_data.index]
+                set_setting(arg_data.path, arg_data.name, "1", "boolean")
+            else
+                arg_index = alias_data.index
+            end
         end 
     end
-
 end
+
+return settings
