@@ -95,14 +95,28 @@ until err == nil
 print_log("info", "Someone connected!", colors.yellow)
 
 local client = res
+print(client)
 
-client:settimeout(500)
-local data, err = client:receive()
-pprint(data)
+client:settimeout(0.25)
 
+local not_finished = false
+local full_data = ""
 
+while true do
+    local data, err, partial = client:receive(4096)
 
-
+    if data then
+        full_data = full_data .. data
+        not_finished = true
+    else
+        print("Received data")
+        pprint(full_data)
+        pprint(string.byte(full_data))
+        not_finished = true
+        full_data = ""
+        close_server()
+    end
+end
 
 client:close()
 
