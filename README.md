@@ -1,6 +1,8 @@
 # What is **Basil**
 **Basil** is a basic minecraft server written in `C` and `LUA`
 It is easily moddable, since the server and game logic is implemented in `LUA`
+**IMPORTANT: This server was written on and tested on Arch linux only***
+
 
 <div align="center">
   <img src="server-icon.png" alt="Server icon" width="100">

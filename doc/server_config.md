@@ -43,20 +43,21 @@ server-port=25565
 
 ## Custom basil properties
 
-### 
+### World type
 #### Description
+The type of the generated world, values can be:
+- stone: For a 1 layer superflat stone world
+- default: For a 5 layer tall: grass_bock, dirt, stone, stone, bedrock superflat
+- noise: For a perlin noise random terrain generation
 #### Example
 ```
+world-type=noise
 ```
 
-### 
+### World size
 #### Description
+Sets the maximum size of a minecraft world. This property specifies the side length of the rectangle (in chunks), which is the world boder it self
 #### Example
 ```
-```
-
-### 
-#### Description
-#### Example
-```
+world-size=32
 ```

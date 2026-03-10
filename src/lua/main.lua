@@ -2,9 +2,9 @@ require "src/lua/common"
 require "src/lua/colors"
 require "src/lua/log"
 
-settings = require "src/lua/argparse"
-
 --[argv]: comes from C
+
+settings = require "src/lua/argparse"
 
 add_argument(
     "ip", {"ip", "-a"},
@@ -17,5 +17,7 @@ add_argument(
     "number", "25565", "The PORT of the server",
     "set", "port"
 )
+
+pprint(argv)
 
 parse(argv)

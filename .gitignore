@@ -1,3 +1,4 @@
 src/json.lua
 logs/
 bin/
+test/
