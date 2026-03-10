@@ -13,13 +13,16 @@
 #define PORT 25565
 
 int main() {
-    print_color("Server started", color_green);
+    print_color("Server started!", color_green);
 
     lua_State *L = luaL_newstate();
-    luaL_openlibs(L);
+
+    //luaL_checklstring(L, 1, NULL);
+
+    //luaL_openlibs(L);
 
     // Execute Lua script
-    if (luaL_dofile(L, "test.lua")) {
+    if (luaL_dofile(L, "src/lua/test.lua")) {
         printf("Error: %s\n", lua_tostring(L, -1));
     }
 
