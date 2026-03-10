@@ -1,12 +1,12 @@
-require "src/common"
-require "src/colors"
-require "src/log"
+require "src/lua/common"
+require "src/lua/colors"
+require "src/lua/log"
 
-local http = require("socket.http")
-local ltn12 = require("ltn12")
-local socket = require("socket")
+settings = require "src/lua/argparse"
 
-settings = require "src/argparse"
+print(os)
+
+error(("%sExited%s"):format(colors.yellow, colors.white))
 
 -- Start program
 local raw_args = { ... }
@@ -43,6 +43,7 @@ end
 ----------
 -- MAIN --
 ----------
+
 
 local tcp = socket.tcp()
 

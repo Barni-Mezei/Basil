@@ -1,4 +1,4 @@
-local lfs = require("lfs")
+local lfs = 0--require("lfs")
 
 local logs = {}
 

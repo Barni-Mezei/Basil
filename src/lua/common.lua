@@ -1,4 +1,6 @@
---require "colors"
+os.exit = function ()
+    error()
+end
 
 local function pprint_iter(data, depth)
     local d = depth or 0

@@ -1,5 +1,5 @@
 all:
-	gcc main.c -Wall -o main -I/usr/local/lua/include -L/usr/local/lua -llua /usr/local/lib/liblua.a
+	gcc src/c/main.c -Wall -o bin/main -I/usr/local/lua/include -L/usr/local/lua -llua lib/liblua.a
 
 clear:
 	rm -f main.o
