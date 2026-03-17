@@ -1,6 +1,9 @@
 #include <stdio.h> 
 #include <stdlib.h>
-#include <string.h> 
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+#include <pthread.h>
 
 // Networking libraries
 #include <arpa/inet.h>
@@ -15,17 +18,58 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+#define SA struct sockaddr
 
+typedef struct _basil_settings {
+    long int ip;
+    uint16_t port;
+    char* modt;
+    int max_players;
+    int world_size;
+    int world_type;
+} basil_settings;
 
-// Custom libraries
+// Keep track of connected client IDs
+#define MAX_CLIENTS 16
+int clients[MAX_CLIENTS] = {};
+int clientLen = 0;
+
+#define MAX_PACKET_SIZE 16384
+//#define MAX_PACKET_SIZE 2097152 // 2MB
+
+// Include custom libraries
+#include "lib.c"
 #include "colors.c"
 #include "files.c"
 
-#define SA struct sockaddr
+void* clientManager(void* sockfd) {
+    struct sockaddr_in client;
+    int length = sizeof(client);
 
-// These values may be modified by the config file
-char *IP = "127.0.0.1";
-unsigned int PORT = 25565;
+    while (true) {
+        // Accept the data packet from the client
+        int connfd = accept(*(int*)sockfd, (SA*)&client, (unsigned int*)&length);
+
+        printf("conn %d\n", connfd);
+
+        if (connfd < 0) {
+            print_color("Server accept failed", color_red);
+        } 
+
+        if (clientLen < MAX_CLIENTS) {
+            clients[clientLen] = connfd;
+            clientLen++;
+
+            char str[32];
+            snprintf(str, 32, "Client connected [%d/%d]", clientLen, MAX_CLIENTS);
+            print_color(str, color_yellow);
+        } else {
+            print_color("Max clients reached!", color_red);
+        }
+
+        sleepms(1);
+    }    
+}
 
 int main(int argc, char **argv) {
     print_color("Server started", color_green);
@@ -67,32 +111,20 @@ int main(int argc, char **argv) {
 
     read_directories("mods");
 
-    // TODO: load server config from server.properties
+    // Load server.properties
+    basil_settings settings = {};
+    readServerConfig("server.properties", &settings);
 
-    // Parse
-
-    lua_getglobal(L, "settings");
-    lua_pushnil(L);  // First key
-    while (lua_next(L, -2) != 0) {
-        // Key is at -2, value is at -1
-        if (lua_isstring(L, -2) && lua_isstring(L, -1)) {
-            printf("%s = %s\n",
-                lua_tostring(L, -2),
-                lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);  // Remove value, keep key
-    }
-    lua_pop(L, 1);  // Remove table
-
+    /*print_color("Exit", color_red);
     lua_close(L);
-    return 0;
+    return 0;*/ 
 
     //
     // Networking
     //
 
-    int sockfd, connfd, length;
-    struct sockaddr_in servaddr, client;
+    int sockfd;
+    struct sockaddr_in servaddr;
 
     // socket create and verification 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -108,8 +140,8 @@ int main(int argc, char **argv) {
 
     // Assign IP and PORT 
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(IP);
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_addr.s_addr = settings.ip;
+    servaddr.sin_port = ntohs(settings.port);
 
     // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
@@ -127,10 +159,48 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    printf("You can connect on %s%s:%d%s\n", color_yellow, IP, PORT, color_white);
+    // Print server logo
+    printf("%s\n", basil_logo);
 
-    length = sizeof(client);
-  
+    // get back the IP in a string formt
+    char strIp[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &settings.ip, strIp, INET_ADDRSTRLEN);
+
+    printf("You can connect on %s%s:%d%s\n", color_yellow, strIp, settings.port, color_white);
+
+
+    // Spawn client manager thread
+    pthread_t clientThread;
+    pthread_create(&clientThread, NULL, clientManager, &sockfd);
+
+    // Listen for packaged from the connected clients
+   
+    char buff[MAX_PACKET_SIZE];
+    int n;
+
+    while (true) {
+        printf("Client count: %d\n", clientLen);
+
+        for (int clientIndex = 0; clientIndex < clientLen; clientIndex++) {
+            printf("Emptying %d\n", clients[clientIndex]);
+            bzero(buff, MAX_PACKET_SIZE);
+    
+            // read the message from client and copy it in buffer
+            printf("Reading %d\n", clients[clientIndex]);
+            int packetLength = read(clients[clientIndex], buff, sizeof(buff));
+
+            // print buffer which contains the client contents
+            printf("Buffer[%d]: %s\n", packetLength, buff);
+            break;
+        }
+
+        sleepms(500);
+    }
+
+    pthread_join(clientThread, NULL);
+
+    /*length = sizeof(client);
+
     // Accept the data packet from the client
     connfd = accept(sockfd, (SA*)&client, (unsigned int*)&length);
     if (connfd < 0) {
@@ -139,10 +209,7 @@ int main(int argc, char **argv) {
         return 0;
     } 
 
-    print("Client connected");
-
-    // Function for chatting between client and server
-    //  func(connfd);
+    print("Client connected");*/
 
     // Close the socket and the LUA environment
     close(sockfd);

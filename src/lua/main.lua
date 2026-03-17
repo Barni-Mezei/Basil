@@ -18,6 +18,4 @@ add_argument(
     "set", "port"
 )
 
-pprint(argv)
-
 parse(argv)
