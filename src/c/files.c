@@ -60,7 +60,7 @@ bool readServerConfig(const char* path, basil_settings* settings) {
     // Line buffer
     char lineBuf[128];
 
-    inet_pton(AF_INET, "127.0.0.1", &settings->ip);
+    inet_pton(AF_INET, "127.0.0.2", &settings->ip);
     settings->port = 25565;
     settings->modt = "Basil - A simple minecraft server";
     settings->max_players = 4;

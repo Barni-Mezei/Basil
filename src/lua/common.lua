@@ -1,5 +1,5 @@
 os.exit = function ()
-    error()
+    c_exit()
 end
 
 local function pprint_iter(data, depth)

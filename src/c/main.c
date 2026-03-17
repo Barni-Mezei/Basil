@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <signal.h>
 #include <pthread.h>
 
 // Networking libraries
@@ -37,20 +38,33 @@ int clientLen = 0;
 #define MAX_PACKET_SIZE 16384
 //#define MAX_PACKET_SIZE 2097152 // 2MB
 
+bool mainIsRunning = false;
+lua_State *L;
+
 // Include custom libraries
 #include "lib.c"
 #include "colors.c"
 #include "files.c"
 
-void* clientManager(void* sockfd) {
+//
+// CODE
+//
+void exitHandler(int signalId) {
+    mainIsRunning = false;
+}
+
+int luaExit(lua_State* L) {
+    exitHandler(2);
+    return 0;
+}
+
+void* connectionManager(void* sockfd) {
     struct sockaddr_in client;
     int length = sizeof(client);
 
-    while (true) {
+    while (mainIsRunning) {
         // Accept the data packet from the client
         int connfd = accept(*(int*)sockfd, (SA*)&client, (unsigned int*)&length);
-
-        printf("conn %d\n", connfd);
 
         if (connfd < 0) {
             print_color("Server accept failed", color_red);
@@ -67,8 +81,78 @@ void* clientManager(void* sockfd) {
             print_color("Max clients reached!", color_red);
         }
 
-        sleepms(1);
-    }    
+        sleepms(100);
+    }
+    
+    return (void*)0;
+}
+
+void* packetManagerManager(void* sockfd) {
+    char buff[MAX_PACKET_SIZE];
+
+    while (mainIsRunning) {
+        for (int clientIndex = 0; clientIndex < clientLen; clientIndex++) {
+            // Empty out the buffer
+            bzero(buff, MAX_PACKET_SIZE);
+    
+            // Read the buffer
+            int packetLength = read(clients[clientIndex], buff, sizeof(buff));
+
+            // Packet has data?
+            if (packetLength != 0) {
+                // Search for a packet handler LUA function
+                lua_getglobal(L, "basil_packet_manager");
+
+                // Is there a handler function available?
+                if (lua_isfunction(L, -1)) {
+                    // Construct table from the received numbers
+                    lua_createtable(L, packetLength, 0);
+
+                    for (int i = 0; i < packetLength; i++) {
+                        // Add numbers in the following format:
+                        /*
+                        {1, 0, 0, 1, 0, 1, 1, 0, <- 8 bit repr. LSB -> MSB, 5 <- the signed number it self }
+                        */
+                        lua_createtable(L, 8, 0);
+
+                        char n = buff[i]; 
+
+                        // Add the number as raw bits
+                        for (int j = 0; j < 8; j++) {
+                            lua_pushinteger(L, (lua_Number)(n & 1));
+                            lua_seti(L, -2, j + 1);
+
+                            n = n >> 1;
+                        }
+                        // Add the raw number
+                        //lua_pushinteger(L, (lua_Number)buff[i]);
+                        //lua_seti(L, -2, 9);
+
+                        lua_seti(L, -2, i + 1);
+                    }
+
+                    int status = lua_pcall(L, 1, 0, 0);
+                    if (status != LUA_OK) {
+                        const char *error_message = lua_tostring(L, -1);
+                        if (error_message != NULL) {
+                            printf("Error: %s\n", error_message);
+                        }
+                        lua_pop(L, 1);
+                        exitHandler(2);
+                    }
+                } else {
+                    print_color("No LUA packet handler found!", color_red);
+                    exitHandler(2);
+                }
+
+            }
+
+        }
+
+        sleepms(100);
+    }
+
+    return (void*)0;
 }
 
 int main(int argc, char **argv) {
@@ -78,7 +162,7 @@ int main(int argc, char **argv) {
     // LUA
     //
 
-    lua_State *L = luaL_newstate();
+    L = luaL_newstate();
 
     // Load LUA standard libraries
     luaopen_base(L);
@@ -88,6 +172,9 @@ int main(int argc, char **argv) {
     luaopen_math(L);   lua_setglobal(L, "math");
     luaopen_table(L);  lua_setglobal(L, "os");
     luaopen_package(L);
+
+    // Register exit handler
+    lua_register(L, "c_exit", luaExit);
 
     // Give command line arguments to the LUA env
     lua_createtable(L, argc, 0);
@@ -115,6 +202,11 @@ int main(int argc, char **argv) {
     basil_settings settings = {};
     readServerConfig("server.properties", &settings);
 
+    // Set server IP if provided
+    if (argc > 1) {
+        inet_pton(AF_INET, argv[1], &settings.ip);
+    }
+
     /*print_color("Exit", color_red);
     lua_close(L);
     return 0;*/ 
@@ -125,6 +217,11 @@ int main(int argc, char **argv) {
 
     int sockfd;
     struct sockaddr_in servaddr;
+
+    struct linger sl;
+    sl.l_onoff = 0;		/* non-zero value enables linger option in kernel */
+    sl.l_linger = 0;	/* timeout interval in seconds */
+    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
 
     // socket create and verification 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -168,53 +265,37 @@ int main(int argc, char **argv) {
 
     printf("You can connect on %s%s:%d%s\n", color_yellow, strIp, settings.port, color_white);
 
+    //
+    // Data polling and event loops
+    //
 
-    // Spawn client manager thread
-    pthread_t clientThread;
-    pthread_create(&clientThread, NULL, clientManager, &sockfd);
+    mainIsRunning = true;
 
-    // Listen for packaged from the connected clients
-   
-    char buff[MAX_PACKET_SIZE];
-    int n;
+    // Spawn a connection manager thread
+    pthread_t connectionThread;
+    pthread_create(&connectionThread, NULL, connectionManager, &sockfd);
 
-    while (true) {
-        printf("Client count: %d\n", clientLen);
+    // Spawn a packet manager thread
+    pthread_t packetManagerThread;
+    pthread_create(&packetManagerThread, NULL, packetManagerManager, &sockfd);
 
-        for (int clientIndex = 0; clientIndex < clientLen; clientIndex++) {
-            printf("Emptying %d\n", clients[clientIndex]);
-            bzero(buff, MAX_PACKET_SIZE);
-    
-            // read the message from client and copy it in buffer
-            printf("Reading %d\n", clients[clientIndex]);
-            int packetLength = read(clients[clientIndex], buff, sizeof(buff));
+    // Set event handling for Ctrl + C
+    signal(SIGQUIT, exitHandler);
+    signal(SIGINT, exitHandler);
 
-            // print buffer which contains the client contents
-            printf("Buffer[%d]: %s\n", packetLength, buff);
-            break;
-        }
+    // Wait until a close event
+    while (mainIsRunning) sleep(1);
 
-        sleepms(500);
-    }
-
-    pthread_join(clientThread, NULL);
-
-    /*length = sizeof(client);
-
-    // Accept the data packet from the client
-    connfd = accept(sockfd, (SA*)&client, (unsigned int*)&length);
-    if (connfd < 0) {
-        print_color("Server accept failed", color_red);
-        lua_close(L);
-        return 0;
-    } 
-
-    print("Client connected");*/
+    // Kill threads and wait for return
+    pthread_cancel(connectionThread);
+    pthread_cancel(packetManagerThread);
+    pthread_join(connectionThread, NULL);
+    pthread_join(packetManagerThread, NULL);
 
     // Close the socket and the LUA environment
     close(sockfd);
     lua_close(L);
 
     print_color("Server stopped", color_red);
-    return 0;
+    _exit(0);
 }
